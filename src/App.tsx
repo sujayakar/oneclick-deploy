@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/ui/use-toast"
+import { Toaster } from "@/components/ui/toaster"
 
 const deployUrl = "https://sujayakar--oneclick-deploy-handler.modal.run";
 
@@ -14,32 +16,85 @@ const DEFAULT_TEAM_SLUG = "sujayakar-team";
 export default function App() {
   const [step, setStep] = useState<Step>({ type: "start" });
   return (
-    <main className="container max-w-4xl flex flex-col gap-8">
-      <h1 className="text-4xl font-extrabold my-8 text-center">
-        Deploy to Convex
-      </h1>
-      {step.type === "start" && <StartForm setStep={setStep} />}
-      {step.type === "deploying" && (
-        <DeployStatus {...step} setStep={setStep} />
-      )}
-      {step.type === "done" && <Done {...step} />}
-    </main>
+    <>
+      <main className="container max-w-4xl flex flex-col gap-8">
+        <h1 className="text-4xl font-extrabold my-8 text-center">
+          Deploy to Convex
+        </h1>
+        {step.type === "start" && <StartForm setStep={setStep} />}
+        {step.type === "deploying" && (
+          <DeployStatus {...step} setStep={setStep} />
+        )}
+        {step.type === "done" && <Done {...step} />}
+      </main>
+      <Toaster />
+    </>
   );
 }
 
 function StartForm(props: { setStep: (step: Step) => void }) {
+  const { toast } = useToast()
   const [repoUrl, setRepoUrl] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [teamSlug, setTeamSlug] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!repoUrl || !teamSlug || !authToken) {
+    if (!repoUrl) {
+      toast({
+        variant: "destructive",
+        title: "Missing repo URL",
+        description: "Repo URL is required",
+      })
+      return;
+    }
+
+    // Do some normalization of the URL to be helpful.
+    let normalized = repoUrl.trim();
+    if (!normalized.startsWith("https://github.com/")) {
+      toast({
+        variant: "destructive",
+        title: "Invalid repo URL",
+        description: "Repo URL must start with https://github.com/.",
+      })
+      return;
+    }    
+    if (normalized.endsWith("/")) {
+      normalized = normalized.slice(0, -1);
+    }
+    if (!normalized.endsWith(".git")) {
+      normalized = `${normalized}.git`;
+    }    
+    if (!normalized.endsWith(".git")) {
+      normalized = `${normalized}.git`;
+    }
+    if (!normalized.startsWith("https://github.com/") || !normalized.endsWith(".git")) {
+      toast({
+        variant: "destructive",
+        title: "Invalid repo URL",
+        description: "Repo URL must start with https://github.com/ and end with .git.",
+      })
+      return;
+    }
+    if (!teamSlug) {
+      toast({
+        variant: "destructive",
+        title: "Missing team slug",
+        description: "Team slug is required",
+      })
+      return;
+    }
+    if (!authToken) {
+      toast({
+        variant: "destructive",
+        title: "Missing auth token",
+        description: "Auth token is required",
+      })
       return;
     }
     props.setStep({
       type: "deploying",
-      repoUrl: repoUrl.trim(),
+      repoUrl: normalized.trim(),
       teamSlug: teamSlug.trim(),
       authToken: authToken.trim(),
     });
