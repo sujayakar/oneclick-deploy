@@ -10,7 +10,7 @@ type Step =
   | { type: "deploying"; repoUrl: string; teamSlug: string; authToken: string }
   | { type: "done"; deploymentName: string; logEvents: LogEvent[] };
 
-const DEFAULT_GIT_URL = "https://github.com/get-convex/prosemirror-sync.git";
+const DEFAULT_GIT_URL = "https://github.com/sujayakar/oneclick-demo.git";
 const DEFAULT_TEAM_SLUG = "sujayakar-team";
 
 export default function App() {
