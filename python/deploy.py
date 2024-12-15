@@ -100,6 +100,10 @@ def download_repo(body: dict):
         for line in stream_command(cmd, cwd=os.path.join(temp_dir, repo_name)):
             yield {"status": line}
 
+        env_local = open(os.path.join(temp_dir, repo_name, ".env.local")).read()
+        (_, _, convex_url) = env_local.partition("CONVEX_URL=")
+        deployment_name = convex_url.strip().lstrip("https://").split(".")[0]
+
         package_json = json.loads(
             open(os.path.join(temp_dir, repo_name, "package.json")).read()
         )
@@ -161,11 +165,7 @@ def download_repo(body: dict):
                             }
                         ),
                     ]
-                    subprocess.check_output(cmd, cwd=os.path.join(temp_dir, repo_name))
-
-        env_local = open(os.path.join(temp_dir, repo_name, ".env.local")).read()
-        (_, _, convex_url) = env_local.partition("CONVEX_URL=")
-        deployment_name = convex_url.strip().lstrip("https://").split(".")[0]
+                    subprocess.check_output(cmd, cwd=os.path.join(temp_dir, repo_name))        
 
     yield {"done": deployment_name}
 
