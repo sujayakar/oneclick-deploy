@@ -34,7 +34,7 @@ export default function App() {
 
 function StartForm(props: { setStep: (step: Step) => void }) {
   const { toast } = useToast()
-  const [repoUrl, setRepoUrl] = useState<string | null>(null);
+  const [repoUrl, setRepoUrl] = useState<string | null>(DEFAULT_GIT_URL);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [teamSlug, setTeamSlug] = useState<string | null>(null);
 
