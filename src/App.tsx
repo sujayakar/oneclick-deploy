@@ -1,223 +1,273 @@
 import { Button } from "@/components/ui/button";
-import { SignInButton, UserButton } from "@clerk/clerk-react";
-import {
-  Authenticated,
-  Unauthenticated,
-  useAction,
-  useMutation,
-  useQuery,
-} from "convex/react";
-import { api } from "../convex/_generated/api";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-// TODO:
-// - [ ] Should we be using Bun? Much faster?
-// - [ ] Support paths within repos
-
-type Repo = {
-  githubUrl: string;
-  teamSlug: string;
-};
+const deployUrl = "https://sujayakar--oneclick-deploy-handler.modal.run";
 
 type Step =
   | { type: "start" }
-  | { type: "picked repo"; repo: Repo }
-  | { type: "opened dashboard"; repo: Repo }
-  | { type: "submitted token"; repo: Repo }
-  | { type: "ready to deploy"; repo: Repo; deviceToken: string }  
+  | { type: "deploying"; repoUrl: string; teamSlug: string; authToken: string }
+  | { type: "done"; deploymentName: string; logEvents: LogEvent[] };
+
+const DEFAULT_GIT_URL = "https://github.com/get-convex/prosemirror-sync.git";
+const DEFAULT_TEAM_SLUG = "sujayakar-team";
 
 export default function App() {
-  const [repo, setRepo] = useState<Repo>({ githubUrl: "https://github.com/get-convex/multiplayer-cursors", teamSlug: "sujayakar-team" });
   const [step, setStep] = useState<Step>({ type: "start" });
-  const [authToken, setAuthToken] = useState<string | null>(null);
-
-  const exchangeToken = useAction(api.cloneRepo.exchangeToken);
-
-  const handlePickRepo = () => {
-    if (!repo.githubUrl) {
-      return;
-    }
-    setStep({ type: "picked repo", repo });
-  };
-
-  const handleExchangeToken = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!authToken || step.type !== "opened dashboard") {
-      return;
-    }
-    setStep({ type: "submitted token", repo: step.repo });
-    try {
-      const deviceToken = await exchangeToken({ authToken });
-      setStep({ type: "ready to deploy", repo: step.repo, deviceToken });
-    } catch (error) {
-      console.error("Error exchanging token:", error);
-      setStep({ type: "start" });
-    }
-  };
-
   return (
     <main className="container max-w-4xl flex flex-col gap-8">
       <h1 className="text-4xl font-extrabold my-8 text-center">
         Deploy to Convex
       </h1>
-      {!!(step as any).repo && (
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-foreground">
-            Repo: {(step as any).repo.githubUrl}
-          </p>
-        </div>
+      {step.type === "start" && <StartForm setStep={setStep} />}
+      {step.type === "deploying" && (
+        <DeployStatus {...step} setStep={setStep} />
       )}
-      <div className="flex justify-center">
-        {step.type === "start" && (
-          <form          
-            onSubmit={(e) => {
-              e.preventDefault();
-              handlePickRepo();
-            }}
-            className="flex flex-col items-center gap-4 w-full"
-          >
-            <p className="text-foreground">Pick a GitHub repo to deploy:</p>
-            <div className="flex flex-col gap-2 w-full max-w-2xl">
-              <input
-                type="text"
-                value={repo?.githubUrl ?? ""}
-                onChange={(e) =>
-                  setRepo({ ...repo, githubUrl: e.target.value })
-                }
-                className="flex-1 px-3 py-2 rounded-md bg-background border border-input text-foreground"
-                placeholder="GitHub repo URL"
-              />
-              <input
-                type="text"
-                value={repo?.teamSlug ?? ""}
-                onChange={(e) => setRepo({ ...repo, teamSlug: e.target.value })}
-                className="flex-1 px-3 py-2 rounded-md bg-background border border-input text-foreground"
-                placeholder="Team slug"
-              />
-              <Button type="submit">Submit</Button>
-            </div>
-          </form>
-        )}
-        {step.type === "picked repo" && (
-          <a
-            target="_blank"
-            href="https://dashboard.convex.dev/auth"
-            onClick={() =>
-              setStep({ type: "opened dashboard", repo: step.repo })
-            }
-            className="inline-flex items-center px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            Get <code className="mx-1">convex dev</code> access token
-          </a>
-        )}
-        {step.type === "opened dashboard" && (
-          <div className="flex flex-col items-center gap-4">
-            <p className="text-foreground">
-              Paste in the access token you got from the dashboard:
-            </p>
-            <form
-              onSubmit={handleExchangeToken}
-              className="flex gap-2 w-full max-w-2xl"
-            >
-              <input
-                type="text"
-                value={authToken ?? ""}
-                onChange={(e) => setAuthToken(e.target.value)}
-                className="flex-1 px-3 py-2 rounded-md bg-background border border-input text-foreground"
-                placeholder="Access token"
-              />
-              <Button type="submit">Submit</Button>
-            </form>
-          </div>
-        )}
-        {step.type === "submitted token" && (
-          <div className="flex flex-col items-center gap-4">
-            <p className="text-foreground">Waiting for device token...</p>
-          </div>
-        )}
-        {step.type === "ready to deploy" && (
-          <div className="flex flex-col items-center gap-4">
-            <p className="text-foreground">Ready to deploy!</p>
-            <p className="text-foreground">
-              <Button>Deploy</Button>
-            </p>
-          </div>
-        )}
-      </div>
+      {step.type === "done" && <Done {...step} />}
     </main>
   );
 }
 
-// function Test() {
-// <Authenticated>
-//         <SignedIn />
-//       </Authenticated>
-//       <Unauthenticated>
-//         <div className="flex justify-center">
-//           <SignInButton mode="modal">
-//             <Button>Sign in</Button>
-//           </SignInButton>
-//         </div>
-//       </Unauthenticated>
-// }
+function StartForm(props: { setStep: (step: Step) => void }) {
+  const [repoUrl, setRepoUrl] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [teamSlug, setTeamSlug] = useState<string | null>(null);
 
-// function SignedIn() {
-//   const { numbers, viewer } =
-//     useQuery(api.myFunctions.listNumbers, {
-//       count: 10,
-//     }) ?? {};
-//   const addNumber = useMutation(api.myFunctions.addNumber);
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!repoUrl || !teamSlug || !authToken) {
+      return;
+    }
+    props.setStep({
+      type: "deploying",
+      repoUrl: repoUrl.trim(),
+      teamSlug: teamSlug.trim(),
+      authToken: authToken.trim(),
+    });
+  };
 
-//   return (
-//     <>
-//       <p>Welcome {viewer}!</p>
-//       <p className="flex gap-4 items-center">
-//         This is you:
-//         <UserButton afterSignOutUrl="#" />
-//       </p>
-//       <p>
-//         Click the button below and open this page in another window - this data
-//         is persisted in the Convex cloud database!
-//       </p>
-//       <p>
-//         <Button
-//           onClick={() => {
-//             void addNumber({ value: Math.floor(Math.random() * 10) });
-//           }}
-//         >
-//           Add a random number
-//         </Button>
-//       </p>
-//       <p>
-//         Numbers:{" "}
-//         {numbers?.length === 0
-//           ? "Click the button!"
-//           : numbers?.join(", ") ?? "..."}
-//       </p>
-//       <p>
-//         Edit{" "}
-//         <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold">
-//           convex/myFunctions.ts
-//         </code>{" "}
-//         to change your backend
-//       </p>
-//       <p>
-//         Edit{" "}
-//         <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold">
-//           src/App.tsx
-//         </code>{" "}
-//         to change your frontend
-//       </p>
-//       <p>
-//         Check out{" "}
-//         <a
-//           className="font-medium text-primary underline underline-offset-4"
-//           target="_blank"
-//           href="https://docs.convex.dev/home"
-//         >
-//           Convex docs
-//         </a>
-//       </p>
-//     </>
-//   );
-// }
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="space-y-2">
+        <label
+          htmlFor="repo-url"
+          className="block text-sm font-medium text-foreground"
+        >
+          GitHub (Git) repo URL
+        </label>
+        <input
+          id="repo-url"
+          type="text"
+          placeholder={DEFAULT_GIT_URL}
+          value={repoUrl ?? ""}
+          onChange={(e) => setRepoUrl(e.target.value)}
+          className="w-full px-3 py-2 border rounded-md border-input bg-background placeholder:text-muted-foreground placeholder:italic"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label
+          htmlFor="team-slug"
+          className="block text-sm font-medium text-foreground"
+        >
+          Convex team slug
+        </label>
+        <input
+          id="team-slug"
+          type="text"
+          placeholder={DEFAULT_TEAM_SLUG}
+          value={teamSlug ?? ""}
+          onChange={(e) => setTeamSlug(e.target.value)}
+          className="w-full px-3 py-2 border rounded-md border-input bg-background placeholder:text-muted-foreground placeholder:italic"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label
+          htmlFor="auth-token"
+          className="block text-sm font-medium text-foreground"
+        >
+          Auth token (from{" "}
+          <a
+            href="https://dashboard.convex.dev/auth"
+            target="_blank"
+            className="text-primary hover:text-primary/90 underline underline-offset-4"
+          >
+            Convex dashboard
+          </a>
+          )
+        </label>
+        <input
+          id="auth-token"
+          type="text"
+          value={authToken ?? ""}
+          onChange={(e) => setAuthToken(e.target.value)}
+          className="w-full px-3 py-2 border rounded-md border-input bg-background"
+        />
+      </div>
+
+      <Button type="submit" className="w-full">
+        Deploy to Convex
+      </Button>
+    </form>
+  );
+}
+
+type LogEvent = { status: string } | { error: string } | { done: string };
+
+function DeployStatus(props: {
+  repoUrl: string;
+  teamSlug: string;
+  authToken: string;
+  setStep: (step: Step) => void;
+}) {
+  const [logEvents, setLogEvents] = useState<LogEvent[]>([]);
+  useEffect(() => {
+    let isFirstRun = true;
+    const promise = async () => {
+      if (!isFirstRun) return;
+      isFirstRun = false;
+
+      const body = {
+        repo_url: props.repoUrl,
+        team_slug: props.teamSlug,
+        auth_token: props.authToken,
+      };
+      try {
+        const response = await fetch(deployUrl, {
+          method: "POST",
+          body: JSON.stringify(body),
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+            "Cache-Control": "no-cache",
+          },
+        });
+        if (!response.ok) {
+          throw new Error("Failed to fetch status");
+        }
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("Failed to get reader");
+        }
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          const text = decoder.decode(value);
+          const events: LogEvent[] = [];
+          for (const line of text.split("\n")) {
+            if (!line.startsWith("data: ")) {
+              continue;
+            }
+            const trimmed = line.slice(6).trim();
+            if (trimmed === "") {
+              continue;
+            }
+            const event = JSON.parse(trimmed) as LogEvent;
+            events.push(event);
+            if ("done" in event) {
+              setLogEvents((e) => {
+                const newLogEvents = [...e, ...events];
+                props.setStep({
+                  type: "done",
+                  deploymentName: event.done,
+                  logEvents: newLogEvents,
+                });
+                return newLogEvents;
+              });
+              return;
+            }
+          }
+          setLogEvents((e) => [...e, ...events]);
+        }
+      } catch (error: any) {
+        console.error(error);
+        setLogEvents((e) => [...e, { error: error.toString() }]);
+      }
+    };
+    void promise();
+    return () => {};
+  }, [props.repoUrl, props.teamSlug, props.authToken]);
+
+  return (
+    <div className="space-y-4">
+      <div className="p-4 bg-background border rounded-md">
+        <h3 className="font-semibold mb-2 pb-2 border-b flex items-center gap-2">
+          <span className="animate-spin inline-block w-4 h-4 border-2 border-foreground/20 border-t-foreground rounded-full" />
+          Deploying...
+        </h3>
+        <DeploymentLogs logEvents={logEvents} />
+      </div>
+    </div>
+  );
+}
+
+function DeploymentLogs(props: { logEvents: LogEvent[] }) {
+  const errors = [];
+  const statuses = [];
+  let done: string | undefined = undefined;
+  for (const event of props.logEvents) {
+    if ("error" in event) {
+      errors.push(event.error);
+    }
+    if ("status" in event) {
+      statuses.push(event.status);
+    }
+    if ("done" in event) {
+      done = event.done;
+    }
+  }
+  return (
+    <div
+      className="font-mono space-y-1 h-[300px] overflow-y-auto flex flex-col"
+      ref={(el) => {
+        if (el) {
+          el.scrollTop = el.scrollHeight;
+        }
+      }}
+    >
+      {errors.map((error, i) => (
+        <div key={i} className="text-red-800 font-mono">
+          {error}
+        </div>
+      ))}
+      {statuses.map((status, i) => (
+        <div key={i} className="text-foreground">
+          {status}
+        </div>
+      ))}
+      {done && <div className="text-green-600 font-semibold">✓ {done}</div>}
+    </div>
+  );
+}
+
+function Done(props: { deploymentName: string; logEvents: LogEvent[] }) {
+  return (
+    <div className="p-6 bg-background border rounded-md shadow-sm">
+      <h3 className="font-semibold mb-4 pb-3 border-b text-green-600 text-center text-2xl">
+        Deployment complete!
+      </h3>
+      <div className="space-y-3 mb-6 pb-6 border-b">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-gray-700">Deployment name:</span>
+          <code className="font-mono bg-gray-100 px-2 py-1 rounded">
+            {props.deploymentName}
+          </code>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-gray-700">Deployment URL:</span>
+          <a
+            href={`https://${props.deploymentName}.convex.site/`}
+            target="_blank"
+            className="font-mono text-primary hover:text-primary/90 hover:underline"
+          >
+            https://{props.deploymentName}.convex.site/
+          </a>
+        </div>
+      </div>
+      <DeploymentLogs logEvents={props.logEvents} />
+    </div>
+  );
+}
