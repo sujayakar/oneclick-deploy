@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { useToast } from "@/components/ui/use-toast"
-import { Toaster } from "@/components/ui/toaster"
+import { useToast } from "@/components/ui/use-toast";
+import { Toaster } from "@/components/ui/toaster";
 
 const deployUrl = "https://sujayakar--oneclick-deploy-handler.modal.run";
 
@@ -33,7 +33,7 @@ export default function App() {
 }
 
 function StartForm(props: { setStep: (step: Step) => void }) {
-  const { toast } = useToast()
+  const { toast } = useToast();
   const [repoUrl, setRepoUrl] = useState<string | null>(DEFAULT_GIT_URL);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [teamSlug, setTeamSlug] = useState<string | null>(null);
@@ -45,7 +45,7 @@ function StartForm(props: { setStep: (step: Step) => void }) {
         variant: "destructive",
         title: "Missing repo URL",
         description: "Repo URL is required",
-      })
+      });
       return;
     }
 
@@ -56,24 +56,28 @@ function StartForm(props: { setStep: (step: Step) => void }) {
         variant: "destructive",
         title: "Invalid repo URL",
         description: "Repo URL must start with https://github.com/.",
-      })
+      });
       return;
-    }    
+    }
     if (normalized.endsWith("/")) {
       normalized = normalized.slice(0, -1);
     }
     if (!normalized.endsWith(".git")) {
       normalized = `${normalized}.git`;
-    }    
+    }
     if (!normalized.endsWith(".git")) {
       normalized = `${normalized}.git`;
     }
-    if (!normalized.startsWith("https://github.com/") || !normalized.endsWith(".git")) {
+    if (
+      !normalized.startsWith("https://github.com/") ||
+      !normalized.endsWith(".git")
+    ) {
       toast({
         variant: "destructive",
         title: "Invalid repo URL",
-        description: "Repo URL must start with https://github.com/ and end with .git.",
-      })
+        description:
+          "Repo URL must start with https://github.com/ and end with .git.",
+      });
       return;
     }
     if (!teamSlug) {
@@ -81,7 +85,7 @@ function StartForm(props: { setStep: (step: Step) => void }) {
         variant: "destructive",
         title: "Missing team slug",
         description: "Team slug is required",
-      })
+      });
       return;
     }
     if (!authToken) {
@@ -89,7 +93,7 @@ function StartForm(props: { setStep: (step: Step) => void }) {
         variant: "destructive",
         title: "Missing auth token",
         description: "Auth token is required",
-      })
+      });
       return;
     }
     props.setStep({
@@ -153,7 +157,7 @@ function StartForm(props: { setStep: (step: Step) => void }) {
         </label>
         <input
           id="auth-token"
-          type="text"
+          type="password"
           value={authToken ?? ""}
           onChange={(e) => setAuthToken(e.target.value)}
           className="w-full px-3 py-2 border rounded-md border-input bg-background"
@@ -306,13 +310,15 @@ function Done(props: { deploymentName: string; logEvents: LogEvent[] }) {
       </h3>
       <div className="space-y-3 mb-6 pb-6 border-b">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-700">Deployment name:</span>
-          <code className="font-mono bg-gray-100 px-2 py-1 rounded">
+          <span className="font-semibold text-foreground">
+            Deployment name:
+          </span>
+          <code className="font-mono bg-muted px-2 py-1 rounded">
             {props.deploymentName}
           </code>
         </div>
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-700">Deployment URL:</span>
+          <span className="font-semibold text-foreground">Deployment URL:</span>
           <a
             href={`https://${props.deploymentName}.convex.site/`}
             target="_blank"
