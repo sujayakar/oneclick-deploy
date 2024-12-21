@@ -55,6 +55,7 @@ def download_repo(body: dict):
     repo_url = body["repo_url"]
     auth_token = body["auth_token"]
     team_slug = body["team_slug"]
+    env_vars = body.get("env_vars", {})
     provision_url = body.get("provision_url", "https://provision.convex.dev")
 
     repo_name = repo_url.split("/")[-1].replace(".git", "")
@@ -110,6 +111,21 @@ def download_repo(body: dict):
         env["CONVEX_OVERRIDE_ACCESS_TOKEN"] = access_token
         for line in stream_command(cmd, cwd=os.path.join(temp_dir, repo_name), env=env):
             yield {"status": line}
+
+        if env_vars:
+            yield {"status": "Setting environment variables..."}
+            for key, value in env_vars.items():
+                cmd =[
+                    bun_path,
+                    'x',
+                    'convex',
+                    'env',
+                    'set',
+                    key,
+                    value,
+                ]
+                for line in stream_command(cmd, cwd=os.path.join(temp_dir, repo_name), env=env):
+                    yield {"status": line}
 
         yield {"status": "Getting deployment info..."}        
         cmd = [
